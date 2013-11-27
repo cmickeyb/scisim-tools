@@ -1,0 +1,290 @@
+#!/bin/bash
+
+# Copyright (c) Intel Corporation
+# All rights reserved.
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# -- Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# -- Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# -- Neither the name of the Intel Corporation nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+# PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE INTEL OR ITS
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+# PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+export LD_LIBRARY_PATH=/usr/local/lib
+
+F_USAGE='Usage: $0 [start|resume|status|stop|top|killall] rundir...'
+
+F_HOME='/home/opensim/'
+if [ -n "$OPENSIM" ]; then
+    F_HOME=$OPENSIM
+fi
+
+F_DEBUG=''
+if [ -n "$OPENSIMDEBUG" ]; then
+    F_DEBUG=$OPENSIMDEBUG
+fi
+
+F_ARCHIVE="$F_HOME/export"
+if [ -n "$OPENSIMARCHIVE" ]; then
+    F_ARCHIVE=$OPENSIMARCHIVE
+fi
+
+F_COMMAND='status'
+if [ -n "$1" ]; then
+    F_COMMAND=$1
+    shift
+fi
+
+if [ -z "$MONO_THREADS_PER_CPU" ]; then
+    export MONO_THREADS_PER_CPU=200
+fi
+
+
+# -----------------------------------------------------------------
+# Define some functions for cross-platform operation
+# -----------------------------------------------------------------
+export PLATFORM=`uname -o`
+function SafePath()
+{
+    if [ $PLATFORM == 'Cygwin' ]; then
+        echo "$(cygpath -m $1)"
+    else
+        echo $1
+    fi
+}
+
+function SafeExe()
+{
+    if [ $PLATFORM == 'Cygwin' ]; then
+        # must use the short path version to avoid
+        # the ' ' in many windows paths
+        echo "$(cygpath -sm $(which $1).exe)"
+    else
+        echo $1
+    fi
+}
+
+# -----------------------------------------------------------------
+# START
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'start' ]; then
+    for DESTDIR in $@ ; do
+	echo Starting $DESTDIR
+        F_SIMNAME="$(basename $DESTDIR)"
+	cd $F_HOME/$DESTDIR
+        # the '-gui=true' switch fixes some mono/screen fights
+	F_ARGS=''
+	if [ -f Regions/args ]; then
+	    F_ARGS=`cat Regions/args`
+	    echo Adding $F_ARGS
+	fi
+
+        # clean up the old log
+        rm -f screenlog.0
+
+	if [ "$PLATFORM" == 'GNU/Linux' ]; then
+ 	    F_ARGS+=' -console=basic'
+	    if [ -e $F_SIMNAME ]; then
+		F_COMMAND="mono $F_DEBUG $F_SIMNAME $F_ARGS"
+	    else
+		F_COMMAND="mono $F_DEBUG OpenSim.exe $F_ARGS"
+	    fi
+	    echo screen -L -S OpenSim-$F_SIMNAME -p - -d -m $F_COMMAND
+	    screen -L -S OpenSim-$F_SIMNAME -p - -d -m $F_COMMAND
+	elif [ "$PLATFORM" == 'Cygwin' ]; then
+            F_COMMAND="OpenSim.exe $F_ARGS"
+            if [ -e $F_SIMNAME ]; then
+                F_COMMAND="$(readlink $F_SIMNAME) $F_ARGS"
+            fi
+            if [ "$OPENSIMSCREEN" == 'true' ]; then
+                # this doesn't really work
+ 	        F_ARGS+=' -console=basic'
+	        echo screen -L -S OpenSim-$F_SIMNAME -p - -d -m $F_COMMAND
+	        screen -L -S OpenSim-$F_SIMNAME -p - -d -m $F_COMMAND
+            else
+                echo "$F_COMMAND"
+	        cygstart $F_COMMAND
+            fi
+        else
+            echo "Unknown platform: $PLATFORM"
+            exit 1
+	fi
+
+	# this should no longer be necessary but it makes me feel better
+	sleep 1
+    done
+    exit 0
+fi
+
+# -----------------------------------------------------------------
+# STOP
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'stop' ]; then
+    for DESTDIR in $@ ; do
+        if [ -d "$F_HOME/$DESTDIR" ]; then
+	    echo Stopping "$(basename $DESTDIR)"
+
+            cd "$F_HOME/$DESTDIR"
+            echo `pwd`
+            echo $(SafeExe python) $(SafePath "$F_HOME/bin/osshutdown.py") --config OpenSimDefaults.ini
+            $(SafeExe python) $(SafePath "$F_HOME/bin/osshutdown.py") --config OpenSimDefaults.ini
+        fi
+    done
+    exit 0
+fi
+
+# -----------------------------------------------------------------
+# SAVE
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'save' ]; then
+    for DESTDIR in $@ ; do
+        if [ -d "$F_HOME/$DESTDIR" ]; then
+            IFS=','
+            cd "$F_HOME/$DESTDIR"
+
+            OARDIR="$F_ARCHIVE/$(pwd | sed s@$F_HOME/*@@)"
+            mkdir -p $OARDIR
+
+            REGIONLIST="$(perl -e 'while (<>) { print "$1," if /\[(.*)\]/; }' Regions/Regions.ini)"
+            for REGION in $REGIONLIST ; do
+                OARFILE="$OARDIR/$REGION.oar"
+                echo "Save region $REGION in $(basename $DESTDIR) to $OARFILE" 
+#                echo $(SafeExe python) $(SafePath "$F_HOME/bin/ossaveoar.py") --config OpenSimDefaults.ini \
+#                    --oarfile "$OARFILE" --region "$REGION"
+                $(SafeExe python) $(SafePath "$F_HOME/bin/ossaveoar.py") --config OpenSimDefaults.ini \
+                    --oarfile "$OARFILE" --region "$REGION"
+            done
+        fi
+    done
+    exit 0
+fi
+
+# -----------------------------------------------------------------
+# LOAD <DESTDIR> <REGION> <OARFILE>
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'load' ]; then
+    DESTDIR=$1
+    if [ -d "$F_HOME/$DESTDIR" ]; then
+        IFS=','
+	cd "$F_HOME/$DESTDIR"
+        REGION=$2
+        OARFILE=$3
+        echo "Load region $REGION in $(basename $DESTDIR) from $OARFILE" 
+        $(SafeExe python) $(SafePath "$F_HOME/bin/osloadoar.py") --config OpenSimDefaults.ini \
+            --oarfile "$OARFILE" --region "$REGION"
+    fi
+    exit 0
+fi
+
+# -----------------------------------------------------------------
+# KILLALL
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'killall' ]; then
+    killall -9 mono
+
+    exit 0
+fi
+
+# -----------------------------------------------------------------
+# SCREENS
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'screen' ]; then
+    screen -ls | grep OpenSim | sed 's/^.*OpenSim-\([a-zA-Z0-9\.]*\)\s.*$/\1/'
+
+    exit 0
+fi    
+    
+# -----------------------------------------------------------------
+# STATUS
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'status' ]; then
+    ACCT=`whoami`
+    PLIST=`pgrep -u $ACCT mono`
+    if [ "X$PLIST" != "X" ] ; then
+	ps  -o pid,size,%cpu,args -p $PLIST | \
+	    sed 's/mono \([a-zA-Z0-9\.]*\)\s.*/\1/'
+    fi
+
+    exit 0
+fi    
+    
+# -----------------------------------------------------------------
+# TOP
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'top' ]; then
+    ACCT=`whoami`
+    PLIST=`pgrep -u $ACCT mono`
+    if [ "X$PLIST" != "X" ] ; then
+	PIDLIST=`for i in $PLIST ; do echo "-p$i"; done`
+	top $PIDLIST
+    fi
+
+    exit 0
+fi    
+
+
+# -----------------------------------------------------------------
+# USERS
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'users' ]; then
+    for DESTDIR in $@ ; do
+	echo "Users in $DESTDIR"
+        F_SIMNAME="$(basename $DESTDIR)"
+	screen -S OpenSim-$F_SIMNAME -X eval "stuff show users full"
+    done
+    exit 0
+fi    
+ 
+# -----------------------------------------------------------------
+# RESUME
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'resume' ]; then
+    if [ ! -n "$1" ]; then
+	echo "No target specified"
+	exit 1;
+    fi
+
+    for DESTDIR in $@ ; do
+	echo Resume $DESTDIR
+        F_SIMNAME="$(basename $DESTDIR)"
+	screen -r OpenSim-$F_SIMNAME
+	sleep 1
+    done
+    exit 0
+fi
+
+# -----------------------------------------------------------------
+# SHOW LOG
+# -----------------------------------------------------------------
+if [ "$F_COMMAND" == 'log' ]; then
+    if [ ! -n "$1" ]; then
+	echo "No target specified"
+	exit 1;
+    fi
+
+    tail -30 $F_HOME/$1/screenlog.0
+    exit 0
+fi    
+ 
+
+# -----------------------------------------------------------------
+# Ooops
+# -----------------------------------------------------------------
+echo Unknown operation $F_COMMAND
