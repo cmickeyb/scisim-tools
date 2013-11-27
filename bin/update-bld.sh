@@ -60,7 +60,7 @@ if [ -n "$OPENSIMADDONDIR" ]; then
     F_ADDONDIR=$OPENSIMADDONDIR
 fi
 
-F_GITDIR='scisim-git'
+F_GITDIR='opensim-git'
 if [ -n "$OPENSIMSOURCEDIR" ]; then
     F_GITDIR=$OPENSIMSOURCEDIR
 fi

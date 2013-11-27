@@ -90,10 +90,15 @@ while true ; do
     esac
 done
 
-CONFROOT=$F_HOME/$F_CONFDIR
-ECONFDIR=$F_HOME/$F_CONFDIR/estate/
-RCONFDIR=$F_HOME/$F_CONFDIR/region/
-SCONFDIR=$F_HOME/$F_CONFDIR/simulator/
+if [[ $F_CONFDIR == /* ]] ; then
+    CONFROOT=$F_CONFDIR
+else
+    CONFROOT=$F_HOME/$F_CONFDIR
+fi
+
+ECONFDIR=$CONFROOT/plaza/
+RCONFDIR=$CONFROOT/region/
+SCONFDIR=$CONFROOT/simulator/
 
 # -----------------------------------------------------------------
 # Define some functions for cross-platform operation
