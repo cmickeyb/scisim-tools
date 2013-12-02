@@ -100,11 +100,6 @@ while true ; do
 done
 
 # -----------------------------------------------------------------
-# Fix the build path for windows
-# -----------------------------------------------------------------
-F_MSBUILDPATH='v4.0.30319'
-
-# -----------------------------------------------------------------
 # Test the directories first
 # -----------------------------------------------------------------
 if [ ! -d "$F_HOME" ]; then
@@ -198,15 +193,24 @@ if [ $F_PREBUILD == 'yes' ] ; then
 	mono bin/Prebuild.exe /target vs2010
     else
         # the git repository permissions for this are wrong
-        chmod 755 ./runprebuild2010.bat
-	./runprebuild2010.bat
+        ##chmod 755 ./runprebuild2010.bat
+	##./runprebuild2010.bat
+        bin/Prebuild.exe /target nant
+        bin/Prebuild.exe /target vs2010
 
-        F_MSBUILD="C:\\WINDOWS\\Microsoft.NET\\Framework\\$F_MSBUILDPATH\\msbuild"
+        F_REGPATH='\HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\MSBuild\ToolsVersions\4.0\MSBuildToolsPath'
+        F_MSBUILDPATH="$(regtool get $F_REGPATH)" 
+        if [ -z "$F_MSBUILD" ]; then
+            F_MSBUILDPATH="C:\\WINDOWS\\Microsoft.NET\\Framework\\v4.0.30319"
+        fi
+        F_MSBUILD="$(cygpath -w $F_MSBUILDPATH\\msbuild)"
 
+        # there might be an issue here if the path to msbuild contains spaces, can use the
+        # dos path instead of the windows path
         rm -f compileRelease.bat compileDebug.bat
-        echo $F_MSBUILD OpenSim.sln /maxcpucount:$F_NUMPROC '/property:Configuration=Release' \
+        echo "$F_MSBUILD" OpenSim.sln /maxcpucount:$F_NUMPROC '/property:Configuration=Release' \
             > compileRelease.bat
-        echo $F_MSBUILD OpenSim.sln /maxcpucount:$F_NUMPROC '/property:Configuration=Debug' \
+        echo "$F_MSBUILD" OpenSim.sln /maxcpucount:$F_NUMPROC '/property:Configuration=Debug' \
             > compileDebug.bat
         chmod 755 compileRelease.bat compileDebug.bat
 
