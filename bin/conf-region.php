@@ -55,6 +55,9 @@ $simname = '';
 $region = '';
 $simulator = '';
 
+$sizeX = 256;
+$sizeY = 256;
+
 // -----------------------------------------------------------------
 // Process command line options
 // -----------------------------------------------------------------
@@ -255,6 +258,15 @@ function NetworkEndpoint($internal,$external)
 
 // -----------------------------------------------------------------
 // -----------------------------------------------------------------
+function RegionSize($x, $y)
+{
+    global $sizeX, $sizeY;
+    $sizeX = $x;
+    $sizeY = $y;
+}
+
+// -----------------------------------------------------------------
+// -----------------------------------------------------------------
 function ReservedRegion($name,$sim)
 {
     $params = array('RequestMethod' => 'GetScene', 'Name' => $name);
@@ -289,6 +301,7 @@ function Region($name,$uuid,$offX,$offY,$sim)
   global $physAddress, $physPort;
   global $quarkX, $quarkY;
   global $autobackup, $autobackinterval, $autobacknaming, $autobackdir;
+  global $sizeX, $sizeY;
 
   if ($sim != $simulator)
   {
@@ -312,7 +325,8 @@ PhysicalPrimMax = $primphys
 ClampPrimSize = False
 MaxPrims = $primmax
 MaxAgents = $agentmax
-
+SizeX = $sizeX
+SizeY = $sizeY
 EOT;
 
   $basePort++;
